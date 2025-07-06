@@ -40,8 +40,8 @@ func main() {
     
     // Capture a screenshot
     imageData, err := c.FetchImage("https://www.google.com", capture.RequestOptions{
-        "width":  1920,
-        "height": 1080,
+        "vw":  1920,
+        "vh": 1080,
     })
     if err != nil {
         log.Fatal(err)
@@ -78,8 +78,8 @@ Build URLs for different capture types without making HTTP requests:
 ```go
 // Build image URL
 imageURL, err := c.BuildImageURL("https://example.com", capture.RequestOptions{
-    "width":  1920,
-    "height": 1080,
+    "vw":  1920,
+    "vh": 1080,
     "format": "png",
 })
 
@@ -102,8 +102,8 @@ Fetch actual data from the Capture API:
 ```go
 // Fetch image as bytes
 imageData, err := c.FetchImage("https://example.com", capture.RequestOptions{
-    "width":  800,
-    "height": 600,
+    "vw":  800,
+    "vh": 600,
 })
 
 // Fetch PDF as bytes
