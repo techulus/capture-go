@@ -105,7 +105,7 @@ jobs:
         GOOS=windows GOARCH=amd64 go build -o dist/capture-go-windows-amd64.exe .
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: capture-go-binaries
         path: dist/
