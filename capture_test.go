@@ -78,12 +78,12 @@ func TestToQueryString(t *testing.T) {
 			expected: "height=1080&width=1920",
 		},
 		{
-			name: "with format (should be ignored)",
+			name: "with format",
 			options: RequestOptions{
 				"width":  1920,
 				"format": "png",
 			},
-			expected: "width=1920",
+			expected: "format=png&width=1920",
 		},
 		{
 			name: "with empty values (should be ignored)",

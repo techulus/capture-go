@@ -20,6 +20,7 @@ const (
 	RequestTypePDF      RequestType = "pdf"
 	RequestTypeContent  RequestType = "content"
 	RequestTypeMetadata RequestType = "metadata"
+	RequestTypeAnimated RequestType = "animated"
 )
 
 type RequestOptions map[string]interface{}
@@ -77,10 +78,6 @@ func (c *Capture) toQueryString(options RequestOptions) string {
 	params := make(map[string]string)
 
 	for key, value := range options {
-		if key == "format" {
-			continue
-		}
-
 		if value == nil || value == "" {
 			continue
 		}
@@ -171,6 +168,10 @@ func (c *Capture) BuildMetadataURL(targetURL string, options RequestOptions) (st
 	return c.buildURL(RequestTypeMetadata, targetURL, options)
 }
 
+func (c *Capture) BuildAnimatedURL(targetURL string, options RequestOptions) (string, error) {
+	return c.buildURL(RequestTypeAnimated, targetURL, options)
+}
+
 func (c *Capture) FetchImage(targetURL string, options RequestOptions) ([]byte, error) {
 	url, err := c.BuildImageURL(targetURL, options)
 	if err != nil {
@@ -223,6 +224,7 @@ type ContentResponse struct {
 	Success     bool   `json:"success"`
 	HTML        string `json:"html"`
 	TextContent string `json:"textContent"`
+	Markdown    string `json:"markdown"`
 }
 
 func (c *Capture) FetchContent(targetURL string, options RequestOptions) (*ContentResponse, error) {
@@ -276,4 +278,28 @@ func (c *Capture) FetchMetadata(targetURL string, options RequestOptions) (*Meta
 	}
 
 	return &metadataResp, nil
+}
+
+func (c *Capture) FetchAnimated(targetURL string, options RequestOptions) ([]byte, error) {
+	url, err := c.BuildAnimatedURL(targetURL, options)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.Client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch animated: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP error: %d", resp.StatusCode)
+	}
+
+	buf, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return buf, nil
 } 
