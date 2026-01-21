@@ -26,12 +26,12 @@ const (
 type RequestOptions map[string]interface{}
 
 type Capture struct {
-	APIURL   string
-	EdgeURL  string
-	Key      string
-	Secret   string
-	UseEdge  bool
-	Client   *http.Client
+	APIURL  string
+	EdgeURL string
+	Key     string
+	Secret  string
+	UseEdge bool
+	Client  *http.Client
 }
 
 func New(key, secret string, options ...Option) *Capture {
@@ -302,4 +302,4 @@ func (c *Capture) FetchAnimated(targetURL string, options RequestOptions) ([]byt
 	}
 
 	return buf, nil
-} 
+}

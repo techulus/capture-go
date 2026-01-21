@@ -23,7 +23,7 @@ func main() {
 
 	// Example 1: Build URLs for different capture types
 	targetURL := "https://techulus.xyz"
-	
+
 	// Build image URL
 	imageURL, err := c.BuildImageURL(targetURL, capture.RequestOptions{
 		"width":  1920,
@@ -107,4 +107,4 @@ func main() {
 			fmt.Println("PDF saved as document.pdf")
 		}
 	}
-} 
+}
