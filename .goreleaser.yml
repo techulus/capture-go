@@ -43,7 +43,7 @@ brews:
       owner: techulus
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    folder: Formula
+    directory: Formula
     homepage: https://capture.page
     description: CLI for taking screenshots, PDFs, and extracting content from web pages
     license: MIT
