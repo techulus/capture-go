@@ -1,0 +1,58 @@
+version: 2
+
+project_name: capture
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/capture
+    binary: capture
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/techulus/capture-go/internal/cli.Version={{.Version}}
+      - -X github.com/techulus/capture-go/internal/cli.Commit={{.Commit}}
+      - -X github.com/techulus/capture-go/internal/cli.BuildDate={{.Date}}
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+brews:
+  - repository:
+      owner: techulus
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    folder: Formula
+    homepage: https://capture.page
+    description: CLI for taking screenshots, PDFs, and extracting content from web pages
+    license: MIT
+    install: |
+      bin.install "capture"
+    test: |
+      system "#{bin}/capture", "version"
+
+release:
+  github:
+    owner: techulus
+    name: capture-go
