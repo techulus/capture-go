@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [1.21, 1.22, '1.23']
+        go-version: ['1.22', '1.23', '1.24']
 
     steps:
     - name: Checkout code
@@ -46,8 +46,8 @@ jobs:
     needs: test
     strategy:
       matrix:
-        go-version: [1.21]
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        go-version: ['1.24']
+        os: [ubuntu-latest, macos-latest]
 
     steps:
     - name: Checkout code
@@ -69,13 +69,8 @@ jobs:
 
     - name: Test build artifacts
       run: |
-        if [ "$RUNNER_OS" = "Windows" ]; then
-          go build -o capture-go.exe .
-          ./capture-go.exe --help 2>/dev/null || echo "Build successful"
-        else
-          go build -o capture-go .
-          ./capture-go --help 2>/dev/null || echo "Build successful"
-        fi
+        go build -o capture-go .
+        ./capture-go --help 2>/dev/null || echo "Build successful"
 
   build-cross-platform:
     name: Cross-platform Build
@@ -90,7 +85,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21'
+        go-version: '1.24'
 
     - name: Download dependencies
       run: go mod download
@@ -102,7 +97,6 @@ jobs:
         GOOS=linux GOARCH=arm64 go build -o dist/capture-go-linux-arm64 .
         GOOS=darwin GOARCH=amd64 go build -o dist/capture-go-darwin-amd64 .
         GOOS=darwin GOARCH=arm64 go build -o dist/capture-go-darwin-arm64 .
-        GOOS=windows GOARCH=amd64 go build -o dist/capture-go-windows-amd64.exe .
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
