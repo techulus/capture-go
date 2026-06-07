@@ -1,7 +1,9 @@
 package capture
 
 import (
+	"bytes"
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -24,6 +26,28 @@ const (
 )
 
 type RequestOptions map[string]interface{}
+
+type CreateSessionOptions struct {
+	MaxTtlSeconds      int  `json:"maxTtlSeconds,omitempty"`
+	Proxy              bool `json:"proxy,omitempty"`
+	BypassBotDetection bool `json:"bypassBotDetection,omitempty"`
+}
+
+type SessionActionPayload map[string]interface{}
+type SessionActionResponse map[string]interface{}
+type SessionResponse map[string]interface{}
+
+type SessionsAPIError struct {
+	StatusCode int
+	Body       map[string]interface{}
+}
+
+func (e *SessionsAPIError) Error() string {
+	if message, ok := e.Body["error"].(string); ok && message != "" {
+		return message
+	}
+	return fmt.Sprintf("Capture Sessions API request failed with status %d", e.StatusCode)
+}
 
 type Capture struct {
 	APIURL  string
@@ -302,4 +326,117 @@ func (c *Capture) FetchAnimated(targetURL string, options RequestOptions) ([]byt
 	}
 
 	return buf, nil
+}
+
+func (c *Capture) sessionsBearerToken() (string, error) {
+	if c.Key == "" || c.Secret == "" {
+		return "", fmt.Errorf("key and secret are required")
+	}
+
+	return base64.StdEncoding.EncodeToString([]byte(c.Key + ":" + c.Secret)), nil
+}
+
+func (c *Capture) sessionURL(path string) string {
+	return strings.TrimRight(c.EdgeURL, "/") + "/v1/sessions" + path
+}
+
+func (c *Capture) sessionRequest(method, path string, body interface{}, out interface{}) error {
+	token, err := c.sessionsBearerToken()
+	if err != nil {
+		return err
+	}
+
+	var requestBody io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("failed to encode session request body: %w", err)
+		}
+		requestBody = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequest(method, c.sessionURL(path), requestBody)
+	if err != nil {
+		return fmt.Errorf("failed to build session request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute session request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read session response body: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		decoded := map[string]interface{}{}
+		if len(respBody) > 0 {
+			if err := json.Unmarshal(respBody, &decoded); err != nil {
+				decoded["error"] = string(respBody)
+			}
+		}
+		return &SessionsAPIError{StatusCode: resp.StatusCode, Body: decoded}
+	}
+
+	if len(respBody) == 0 {
+		return nil
+	}
+
+	if err := json.Unmarshal(respBody, out); err != nil {
+		return fmt.Errorf("failed to decode session response: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Capture) CreateSession(options *CreateSessionOptions) (SessionResponse, error) {
+	if options == nil {
+		options = &CreateSessionOptions{}
+	}
+
+	var response SessionResponse
+	if err := c.sessionRequest(http.MethodPost, "", options, &response); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *Capture) GetSession(sessionID string) (SessionResponse, error) {
+	var response SessionResponse
+	if err := c.sessionRequest(http.MethodGet, "/"+url.PathEscape(sessionID), nil, &response); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *Capture) CloseSession(sessionID string) (SessionResponse, error) {
+	var response SessionResponse
+	if err := c.sessionRequest(http.MethodDelete, "/"+url.PathEscape(sessionID), nil, &response); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *Capture) ExecuteAction(sessionID, actionType string, payload SessionActionPayload) (SessionActionResponse, error) {
+	if payload == nil {
+		payload = SessionActionPayload{}
+	}
+
+	body := map[string]interface{}{
+		"type":    actionType,
+		"payload": payload,
+	}
+	var response SessionActionResponse
+	if err := c.sessionRequest(http.MethodPost, "/"+url.PathEscape(sessionID)+"/actions", body, &response); err != nil {
+		return nil, err
+	}
+	return response, nil
 }

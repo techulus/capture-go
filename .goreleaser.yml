@@ -24,7 +24,7 @@ builds:
       - -X github.com/techulus/capture-go/internal/cli.BuildDate={{.Date}}
 
 archives:
-  - format: tar.gz
+  - formats: ['tar.gz']
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
@@ -38,7 +38,7 @@ changelog:
       - "^test:"
       - "^chore:"
 
-brews:
+homebrews:
   - repository:
       owner: techulus
       name: homebrew-tap

@@ -90,3 +90,34 @@ func TestParseOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestParseActionPayload(t *testing.T) {
+	payload, err := parseActionPayload(
+		`{"url":"https://example.com","nested":{"enabled":true}}`,
+		[]string{"timeoutMs=1000", "visibleOnly=false"},
+	)
+	if err != nil {
+		t.Fatalf("parseActionPayload() unexpected error: %v", err)
+	}
+
+	if payload["url"] != "https://example.com" {
+		t.Fatalf("url = %v", payload["url"])
+	}
+	if payload["timeoutMs"] != 1000 {
+		t.Fatalf("timeoutMs = %v", payload["timeoutMs"])
+	}
+	if payload["visibleOnly"] != false {
+		t.Fatalf("visibleOnly = %v", payload["visibleOnly"])
+	}
+	nested, ok := payload["nested"].(map[string]interface{})
+	if !ok || nested["enabled"] != true {
+		t.Fatalf("nested = %#v", payload["nested"])
+	}
+}
+
+func TestParseActionPayloadRejectsInvalidJSON(t *testing.T) {
+	_, err := parseActionPayload(`[]`, nil)
+	if err == nil {
+		t.Fatal("expected invalid JSON object error")
+	}
+}

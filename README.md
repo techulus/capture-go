@@ -42,6 +42,12 @@ capture content https://example.com --format html -o page.html
 capture metadata https://example.com --pretty
 
 capture animated https://example.com -X duration=5 -o recording.gif
+
+capture sessions create --max-ttl-seconds 300 --pretty
+capture sessions get sess_123 --pretty
+capture sessions action sess_123 goto --payload-json '{"url":"https://example.com"}'
+capture sessions action sess_123 screenshot -X fullPage=true --pretty
+capture sessions close sess_123 --pretty
 ```
 
 Use `--edge` for faster response, `--dry-run` to preview the request URL.
@@ -87,6 +93,21 @@ func main() {
         "duration": 5,
     })
     os.WriteFile("recording.gif", gif, 0644)
+
+    // Browser sessions
+    created, _ := c.CreateSession(&capture.CreateSessionOptions{
+        MaxTtlSeconds: 300,
+    })
+    session := created["session"].(map[string]interface{})
+    sessionID := session["id"].(string)
+
+    c.ExecuteAction(sessionID, "goto", capture.SessionActionPayload{
+        "url": "https://example.com",
+    })
+    c.ExecuteAction(sessionID, "screenshot", capture.SessionActionPayload{
+        "fullPage": true,
+    })
+    c.CloseSession(sessionID)
 }
 ```
 

@@ -1,7 +1,10 @@
 package capture
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -299,6 +302,159 @@ func TestBuildMetadataURL(t *testing.T) {
 
 	if !contains(url, string(RequestTypeMetadata)) {
 		t.Errorf("URL should contain metadata type, got %s", url)
+	}
+}
+
+func TestSessionsBearerToken(t *testing.T) {
+	c := New("user_123", "secret")
+	token, err := c.sessionsBearerToken()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if token != "dXNlcl8xMjM6c2VjcmV0" {
+		t.Fatalf("unexpected token: %s", token)
+	}
+}
+
+func TestCreateSession(t *testing.T) {
+	var requestBody map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/v1/sessions" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer dXNlcl8xMjM6c2VjcmV0" {
+			t.Errorf("unexpected authorization header: %s", r.Header.Get("Authorization"))
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("unexpected content type: %s", r.Header.Get("Content-Type"))
+		}
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Errorf("failed to decode request body: %v", err)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"session": map[string]interface{}{
+				"id":                 "sess_123",
+				"status":             "active",
+				"expiresAt":          "2026-06-07T00:00:00Z",
+				"maxTtlSeconds":      300,
+				"proxy":              true,
+				"bypassBotDetection": false,
+			},
+		})
+	}))
+	defer server.Close()
+
+	c := New("user_123", "secret")
+	c.EdgeURL = server.URL
+	response, err := c.CreateSession(&CreateSessionOptions{MaxTtlSeconds: 300, Proxy: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if requestBody["maxTtlSeconds"] != float64(300) || requestBody["proxy"] != true {
+		t.Fatalf("unexpected request body: %#v", requestBody)
+	}
+	session, ok := response["session"].(map[string]interface{})
+	if !ok || response["success"] != true || session["id"] != "sess_123" || session["maxTtlSeconds"] != float64(300) {
+		t.Fatalf("unexpected response: %#v", response)
+	}
+}
+
+func TestGetCloseAndExecuteAction(t *testing.T) {
+	var requests []string
+	var actionBody map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		if r.Header.Get("Authorization") != "Bearer dXNlcl8xMjM6c2VjcmV0" {
+			t.Errorf("unexpected authorization header: %s", r.Header.Get("Authorization"))
+		}
+		if r.URL.Path == "/v1/sessions/sess_123/actions" {
+			if err := json.NewDecoder(r.Body).Decode(&actionBody); err != nil {
+				t.Errorf("failed to decode action body: %v", err)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"url":     "https://example.com",
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"session": map[string]interface{}{
+				"id":                 "sess_123",
+				"status":             "active",
+				"startedAt":          "2026-06-07T00:00:00Z",
+				"expiresAt":          "2026-06-07T00:05:00Z",
+				"billedCredits":      nil,
+				"actionCount":        0,
+				"actionSuccessCount": 0,
+				"actionErrorCount":   0,
+				"actionBreakdown":    map[string]interface{}{},
+				"options":            map[string]interface{}{},
+			},
+		})
+	}))
+	defer server.Close()
+
+	c := New("user_123", "secret")
+	c.EdgeURL = server.URL
+	if _, err := c.GetSession("sess_123"); err != nil {
+		t.Fatalf("get session failed: %v", err)
+	}
+	if _, err := c.CloseSession("sess_123"); err != nil {
+		t.Fatalf("close session failed: %v", err)
+	}
+	action, err := c.ExecuteAction("sess_123", "goto", SessionActionPayload{"url": "https://example.com"})
+	if err != nil {
+		t.Fatalf("execute action failed: %v", err)
+	}
+
+	expectedRequests := []string{
+		"GET /v1/sessions/sess_123",
+		"DELETE /v1/sessions/sess_123",
+		"POST /v1/sessions/sess_123/actions",
+	}
+	for i, expected := range expectedRequests {
+		if requests[i] != expected {
+			t.Fatalf("request %d = %s, want %s", i, requests[i], expected)
+		}
+	}
+	if action["url"] != "https://example.com" {
+		t.Fatalf("unexpected action response: %#v", action)
+	}
+	if actionBody["type"] != "goto" || actionBody["payload"].(map[string]interface{})["url"] != "https://example.com" {
+		t.Fatalf("unexpected action body: %#v", actionBody)
+	}
+}
+
+func TestSessionsAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Session not found",
+		})
+	}))
+	defer server.Close()
+
+	c := New("user_123", "secret")
+	c.EdgeURL = server.URL
+	_, err := c.GetSession("missing")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	var apiErr *SessionsAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected SessionsAPIError, got %T", err)
+	}
+	if apiErr.StatusCode != http.StatusNotFound || apiErr.Error() != "Session not found" {
+		t.Fatalf("unexpected error: %#v", apiErr)
 	}
 }
 
