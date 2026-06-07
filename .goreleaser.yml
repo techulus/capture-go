@@ -38,19 +38,16 @@ changelog:
       - "^test:"
       - "^chore:"
 
-homebrews:
+homebrew_casks:
   - repository:
       owner: techulus
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
     homepage: https://capture.page
     description: CLI for taking screenshots, PDFs, and extracting content from web pages
     license: MIT
-    install: |
-      bin.install "capture"
-    test: |
-      system "#{bin}/capture", "version"
+    binaries:
+      - capture
 
 release:
   github:
