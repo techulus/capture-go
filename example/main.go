@@ -107,4 +107,16 @@ func main() {
 			fmt.Println("PDF saved as document.pdf")
 		}
 	}
+
+	// Example 7: Create a CDP session and read its connectUrl
+	cdpSessionResp, err := c.CreateSession(&capture.CreateSessionOptions{
+		CDP: true,
+	})
+	if err != nil {
+		log.Printf("Error creating CDP session: %v", err)
+	} else if session, ok := cdpSessionResp["session"].(map[string]interface{}); ok {
+		if connectURL, ok := session["connectUrl"].(string); ok {
+			fmt.Printf("CDP Connect URL: %s\n", connectURL)
+		}
+	}
 }

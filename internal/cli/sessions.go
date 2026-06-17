@@ -46,6 +46,7 @@ var sessionsActionCmd = &cobra.Command{
 
 var (
 	sessionMaxTTLSeconds      int
+	sessionCDP                bool
 	sessionProxy              bool
 	sessionBypassBotDetection bool
 	sessionsPretty            bool
@@ -58,6 +59,7 @@ func init() {
 	sessionsCmd.AddCommand(sessionsCreateCmd, sessionsGetCmd, sessionsCloseCmd, sessionsActionCmd)
 
 	sessionsCreateCmd.Flags().IntVar(&sessionMaxTTLSeconds, "max-ttl-seconds", 0, "Maximum session lifetime in seconds")
+	sessionsCreateCmd.Flags().BoolVar(&sessionCDP, "cdp", false, "Create a Chrome DevTools Protocol session")
 	sessionsCreateCmd.Flags().BoolVar(&sessionProxy, "proxy", false, "Use the authenticated user's configured browser proxy")
 	sessionsCreateCmd.Flags().BoolVar(&sessionBypassBotDetection, "bypass-bot-detection", false, "Use Capture's bot-detection bypass browser when available")
 	sessionsCreateCmd.Flags().BoolVar(&sessionsPretty, "pretty", false, "Pretty print JSON output")
@@ -74,6 +76,7 @@ func runSessionsCreate(cmd *cobra.Command, args []string) error {
 	client := newCaptureClient()
 	options := &capture.CreateSessionOptions{
 		MaxTtlSeconds:      sessionMaxTTLSeconds,
+		CDP:                sessionCDP,
 		Proxy:              sessionProxy,
 		BypassBotDetection: sessionBypassBotDetection,
 	}

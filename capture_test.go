@@ -359,8 +359,49 @@ func TestCreateSession(t *testing.T) {
 	if requestBody["maxTtlSeconds"] != float64(300) || requestBody["proxy"] != true {
 		t.Fatalf("unexpected request body: %#v", requestBody)
 	}
+	if _, ok := requestBody["cdp"]; ok {
+		t.Fatalf("cdp should be omitted for non-CDP session requests: %#v", requestBody)
+	}
 	session, ok := response["session"].(map[string]interface{})
 	if !ok || response["success"] != true || session["id"] != "sess_123" || session["maxTtlSeconds"] != float64(300) {
+		t.Fatalf("unexpected response: %#v", response)
+	}
+}
+
+func TestCreateSessionCDP(t *testing.T) {
+	var requestBody map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Errorf("failed to decode request body: %v", err)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"session": map[string]interface{}{
+				"id":         "sess_cdp",
+				"status":     "active",
+				"cdp":        true,
+				"connectUrl": "wss://connect.capture.page/sess_cdp",
+			},
+		})
+	}))
+	defer server.Close()
+
+	c := New("user_123", "secret")
+	c.EdgeURL = server.URL
+	response, err := c.CreateSession(&CreateSessionOptions{CDP: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if requestBody["cdp"] != true {
+		t.Fatalf("expected cdp request body, got %#v", requestBody)
+	}
+	if _, ok := requestBody["proxy"]; ok {
+		t.Fatalf("proxy should be omitted for CDP-only session requests: %#v", requestBody)
+	}
+	session, ok := response["session"].(map[string]interface{})
+	if !ok || session["cdp"] != true || session["connectUrl"] != "wss://connect.capture.page/sess_cdp" {
 		t.Fatalf("unexpected response: %#v", response)
 	}
 }
