@@ -44,6 +44,7 @@ capture metadata https://example.com --pretty
 capture animated https://example.com -X duration=5 -o recording.gif
 
 capture sessions create --max-ttl-seconds 300 --pretty
+capture sessions create --cdp --pretty
 capture sessions get sess_123 --pretty
 capture sessions action sess_123 goto --payload-json '{"url":"https://example.com"}'
 capture sessions action sess_123 screenshot -X fullPage=true --pretty
@@ -108,8 +109,20 @@ func main() {
         "fullPage": true,
     })
     c.CloseSession(sessionID)
+
+    // CDP browser sessions
+    cdpCreated, _ := c.CreateSession(&capture.CreateSessionOptions{
+        CDP: true,
+    })
+    cdpSession := cdpCreated["session"].(map[string]interface{})
+    connectURL := cdpSession["connectUrl"].(string)
+    println(connectURL)
 }
 ```
+
+CDP sessions return a `connectUrl` in the session object for Chrome DevTools
+Protocol clients. CDP cannot be combined with `Proxy`/`--proxy` or
+`BypassBotDetection`/`--bypass-bot-detection`.
 
 ### Options
 

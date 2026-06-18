@@ -29,6 +29,7 @@ type RequestOptions map[string]interface{}
 
 type CreateSessionOptions struct {
 	MaxTtlSeconds      int  `json:"maxTtlSeconds,omitempty"`
+	CDP                bool `json:"cdp,omitempty"`
 	Proxy              bool `json:"proxy,omitempty"`
 	BypassBotDetection bool `json:"bypassBotDetection,omitempty"`
 }
