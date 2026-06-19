@@ -51,22 +51,24 @@ func (e *SessionsAPIError) Error() string {
 }
 
 type Capture struct {
-	APIURL  string
-	EdgeURL string
-	Key     string
-	Secret  string
-	UseEdge bool
-	Client  *http.Client
+	APIURL      string
+	EdgeURL     string
+	SessionsURL string
+	Key         string
+	Secret      string
+	UseEdge     bool
+	Client      *http.Client
 }
 
 func New(key, secret string, options ...Option) *Capture {
 	c := &Capture{
-		APIURL:  "https://cdn.capture.page",
-		EdgeURL: "https://edge.capture.page",
-		Key:     key,
-		Secret:  secret,
-		UseEdge: false,
-		Client:  &http.Client{},
+		APIURL:      "https://cdn.capture.page",
+		EdgeURL:     "https://edge.capture.page",
+		SessionsURL: "https://api.capture.page",
+		Key:         key,
+		Secret:      secret,
+		UseEdge:     false,
+		Client:      &http.Client{},
 	}
 
 	for _, option := range options {
@@ -338,31 +340,40 @@ func (c *Capture) sessionsBearerToken() (string, error) {
 }
 
 func (c *Capture) sessionURL(path string) string {
-	return strings.TrimRight(c.EdgeURL, "/") + "/v1/sessions" + path
+	return strings.TrimRight(c.SessionsURL, "/") + "/v1/sessions" + path
 }
 
-func (c *Capture) sessionRequest(method, path string, body interface{}, out interface{}) error {
+// SessionRequestPreview describes a sessions API request without the
+// credentials needed to execute it. It is used by the CLI's --dry-run mode,
+// so it intentionally omits the bearer token (base64(key:secret)).
+type SessionRequestPreview struct {
+	Method string      `json:"method"`
+	URL    string      `json:"url"`
+	Body   interface{} `json:"body,omitempty"`
+}
+
+func (c *Capture) sessionRequest(preview SessionRequestPreview, out interface{}) error {
 	token, err := c.sessionsBearerToken()
 	if err != nil {
 		return err
 	}
 
 	var requestBody io.Reader
-	if body != nil {
-		data, err := json.Marshal(body)
+	if preview.Body != nil {
+		data, err := json.Marshal(preview.Body)
 		if err != nil {
 			return fmt.Errorf("failed to encode session request body: %w", err)
 		}
 		requestBody = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequest(method, c.sessionURL(path), requestBody)
+	req, err := http.NewRequest(preview.Method, preview.URL, requestBody)
 	if err != nil {
 		return fmt.Errorf("failed to build session request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	if body != nil {
+	if preview.Body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
@@ -398,13 +409,35 @@ func (c *Capture) sessionRequest(method, path string, body interface{}, out inte
 	return nil
 }
 
-func (c *Capture) CreateSession(options *CreateSessionOptions) (SessionResponse, error) {
+func (c *Capture) BuildCreateSessionRequest(options *CreateSessionOptions) SessionRequestPreview {
 	if options == nil {
 		options = &CreateSessionOptions{}
 	}
+	return SessionRequestPreview{Method: http.MethodPost, URL: c.sessionURL(""), Body: options}
+}
 
+func (c *Capture) BuildGetSessionRequest(sessionID string) SessionRequestPreview {
+	return SessionRequestPreview{Method: http.MethodGet, URL: c.sessionURL("/" + url.PathEscape(sessionID))}
+}
+
+func (c *Capture) BuildCloseSessionRequest(sessionID string) SessionRequestPreview {
+	return SessionRequestPreview{Method: http.MethodDelete, URL: c.sessionURL("/" + url.PathEscape(sessionID))}
+}
+
+func (c *Capture) BuildExecuteActionRequest(sessionID, actionType string, payload SessionActionPayload) SessionRequestPreview {
+	if payload == nil {
+		payload = SessionActionPayload{}
+	}
+	body := map[string]interface{}{
+		"type":    actionType,
+		"payload": payload,
+	}
+	return SessionRequestPreview{Method: http.MethodPost, URL: c.sessionURL("/" + url.PathEscape(sessionID) + "/actions"), Body: body}
+}
+
+func (c *Capture) CreateSession(options *CreateSessionOptions) (SessionResponse, error) {
 	var response SessionResponse
-	if err := c.sessionRequest(http.MethodPost, "", options, &response); err != nil {
+	if err := c.sessionRequest(c.BuildCreateSessionRequest(options), &response); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -412,7 +445,7 @@ func (c *Capture) CreateSession(options *CreateSessionOptions) (SessionResponse,
 
 func (c *Capture) GetSession(sessionID string) (SessionResponse, error) {
 	var response SessionResponse
-	if err := c.sessionRequest(http.MethodGet, "/"+url.PathEscape(sessionID), nil, &response); err != nil {
+	if err := c.sessionRequest(c.BuildGetSessionRequest(sessionID), &response); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -420,23 +453,15 @@ func (c *Capture) GetSession(sessionID string) (SessionResponse, error) {
 
 func (c *Capture) CloseSession(sessionID string) (SessionResponse, error) {
 	var response SessionResponse
-	if err := c.sessionRequest(http.MethodDelete, "/"+url.PathEscape(sessionID), nil, &response); err != nil {
+	if err := c.sessionRequest(c.BuildCloseSessionRequest(sessionID), &response); err != nil {
 		return nil, err
 	}
 	return response, nil
 }
 
 func (c *Capture) ExecuteAction(sessionID, actionType string, payload SessionActionPayload) (SessionActionResponse, error) {
-	if payload == nil {
-		payload = SessionActionPayload{}
-	}
-
-	body := map[string]interface{}{
-		"type":    actionType,
-		"payload": payload,
-	}
 	var response SessionActionResponse
-	if err := c.sessionRequest(http.MethodPost, "/"+url.PathEscape(sessionID)+"/actions", body, &response); err != nil {
+	if err := c.sessionRequest(c.BuildExecuteActionRequest(sessionID, actionType, payload), &response); err != nil {
 		return nil, err
 	}
 	return response, nil

@@ -72,6 +72,15 @@ func init() {
 	sessionsActionCmd.Flags().BoolVar(&sessionsPretty, "pretty", false, "Pretty print JSON output")
 }
 
+func isSessionsCommand(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c == sessionsCmd {
+			return true
+		}
+	}
+	return false
+}
+
 func runSessionsCreate(cmd *cobra.Command, args []string) error {
 	client := newCaptureClient()
 	options := &capture.CreateSessionOptions{
@@ -79,6 +88,10 @@ func runSessionsCreate(cmd *cobra.Command, args []string) error {
 		CDP:                sessionCDP,
 		Proxy:              sessionProxy,
 		BypassBotDetection: sessionBypassBotDetection,
+	}
+
+	if dryRun {
+		return emitJSON(client.BuildCreateSessionRequest(options), sessionsPretty)
 	}
 
 	response, err := client.CreateSession(options)
@@ -91,6 +104,10 @@ func runSessionsCreate(cmd *cobra.Command, args []string) error {
 
 func runSessionsGet(cmd *cobra.Command, args []string) error {
 	client := newCaptureClient()
+	if dryRun {
+		return emitJSON(client.BuildGetSessionRequest(args[0]), sessionsPretty)
+	}
+
 	response, err := client.GetSession(args[0])
 	if err != nil {
 		return fmt.Errorf("failed to get session: %w", err)
@@ -101,6 +118,10 @@ func runSessionsGet(cmd *cobra.Command, args []string) error {
 
 func runSessionsClose(cmd *cobra.Command, args []string) error {
 	client := newCaptureClient()
+	if dryRun {
+		return emitJSON(client.BuildCloseSessionRequest(args[0]), sessionsPretty)
+	}
+
 	response, err := client.CloseSession(args[0])
 	if err != nil {
 		return fmt.Errorf("failed to close session: %w", err)
@@ -116,6 +137,10 @@ func runSessionsAction(cmd *cobra.Command, args []string) error {
 	}
 
 	client := newCaptureClient()
+	if dryRun {
+		return emitJSON(client.BuildExecuteActionRequest(args[0], args[1], payload), sessionsPretty)
+	}
+
 	response, err := client.ExecuteAction(args[0], args[1], payload)
 	if err != nil {
 		return fmt.Errorf("failed to execute action: %w", err)

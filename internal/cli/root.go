@@ -41,6 +41,12 @@ Authentication is done via environment variables:
 		captureSecret = os.Getenv("CAPTURE_SECRET")
 
 		if captureKey == "" || captureSecret == "" {
+			// Session dry-run previews intentionally omit credentials, so they
+			// can be rendered without CAPTURE_KEY/CAPTURE_SECRET. Other dry-runs
+			// embed a signed token and still require credentials.
+			if dryRun && isSessionsCommand(cmd) {
+				return nil
+			}
 			return fmt.Errorf("CAPTURE_KEY and CAPTURE_SECRET environment variables are required")
 		}
 

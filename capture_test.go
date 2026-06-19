@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -350,7 +351,7 @@ func TestCreateSession(t *testing.T) {
 	defer server.Close()
 
 	c := New("user_123", "secret")
-	c.EdgeURL = server.URL
+	c.SessionsURL = server.URL
 	response, err := c.CreateSession(&CreateSessionOptions{MaxTtlSeconds: 300, Proxy: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -388,7 +389,7 @@ func TestCreateSessionCDP(t *testing.T) {
 	defer server.Close()
 
 	c := New("user_123", "secret")
-	c.EdgeURL = server.URL
+	c.SessionsURL = server.URL
 	response, err := c.CreateSession(&CreateSessionOptions{CDP: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -443,7 +444,7 @@ func TestGetCloseAndExecuteAction(t *testing.T) {
 	defer server.Close()
 
 	c := New("user_123", "secret")
-	c.EdgeURL = server.URL
+	c.SessionsURL = server.URL
 	if _, err := c.GetSession("sess_123"); err != nil {
 		t.Fatalf("get session failed: %v", err)
 	}
@@ -473,6 +474,51 @@ func TestGetCloseAndExecuteAction(t *testing.T) {
 	}
 }
 
+func TestBuildSessionRequests(t *testing.T) {
+	c := New("user_123", "secret")
+	c.SessionsURL = "https://api.example.com"
+
+	create := c.BuildCreateSessionRequest(&CreateSessionOptions{MaxTtlSeconds: 300})
+	if create.Method != http.MethodPost || create.URL != "https://api.example.com/v1/sessions" {
+		t.Fatalf("unexpected create request: %#v", create)
+	}
+	if create.Body.(*CreateSessionOptions).MaxTtlSeconds != 300 {
+		t.Fatalf("unexpected create body: %#v", create.Body)
+	}
+
+	get := c.BuildGetSessionRequest("sess_123")
+	if get.Method != http.MethodGet || get.URL != "https://api.example.com/v1/sessions/sess_123" || get.Body != nil {
+		t.Fatalf("unexpected get request: %#v", get)
+	}
+
+	closeReq := c.BuildCloseSessionRequest("sess_123")
+	if closeReq.Method != http.MethodDelete || closeReq.URL != "https://api.example.com/v1/sessions/sess_123" {
+		t.Fatalf("unexpected close request: %#v", closeReq)
+	}
+
+	action := c.BuildExecuteActionRequest("sess_123", "goto", SessionActionPayload{"url": "https://example.com"})
+	if action.Method != http.MethodPost || action.URL != "https://api.example.com/v1/sessions/sess_123/actions" {
+		t.Fatalf("unexpected action request: %#v", action)
+	}
+	body := action.Body.(map[string]interface{})
+	if body["type"] != "goto" || body["payload"].(SessionActionPayload)["url"] != "https://example.com" {
+		t.Fatalf("unexpected action body: %#v", body)
+	}
+
+	// The previews back --dry-run output and must never leak credentials.
+	token, _ := c.sessionsBearerToken()
+	for _, preview := range []SessionRequestPreview{create, get, closeReq, action} {
+		data, err := json.Marshal(preview)
+		if err != nil {
+			t.Fatalf("failed to marshal preview: %v", err)
+		}
+		rendered := string(data)
+		if strings.Contains(rendered, token) || strings.Contains(rendered, c.Secret) || strings.Contains(rendered, "Authorization") {
+			t.Fatalf("preview leaked credentials: %s", rendered)
+		}
+	}
+}
+
 func TestSessionsAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -484,7 +530,7 @@ func TestSessionsAPIError(t *testing.T) {
 	defer server.Close()
 
 	c := New("user_123", "secret")
-	c.EdgeURL = server.URL
+	c.SessionsURL = server.URL
 	_, err := c.GetSession("missing")
 	if err == nil {
 		t.Fatal("expected error")
